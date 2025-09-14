@@ -1,0 +1,41 @@
+# Core packages
+pandas==2.1.4
+numpy==1.26.4
+matplotlib==3.8.4
+scipy==1.13.1
+
+# Financial data
+alpaca-py==0.39.4
+yfinance==0.2.65
+
+# Machine Learning
+scikit-learn==1.7.1
+torch==2.7.0
+tensorflow==2.18.0
+
+# Reinforcement Learning
+stable-baselines3[extra]==2.6.0
+gymnasium==1.1.0
+
+# Portfolio optimization and analysis
+riskfolio-lib==7.0.1
+pyfolio-reloaded==0.9.9
+vectorbt==0.28.0
+
+# Additional ML/AI
+darts==0.36.0
+shap==0.45.0
+
+# Web interface
+streamlit==1.48.0
+
+# Utilities
+python-dotenv==1.1.1
+ta
+appdirs==1.4.4
+vaderSentiment==3.3.2
+
+# LLM integration (updated for compatibility)
+langchain>=0.2.0
+langchain-openai>=0.1.23
+openai>=1.99.9

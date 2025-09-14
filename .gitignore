@@ -1,6 +1,6 @@
 # .gitignore - Files and folders to ignore in version control
 
-# Environment files (IMPORTANT: Never commit API keys!)
+# Environment files 
 .env
 .env.local
 .env.*.local
