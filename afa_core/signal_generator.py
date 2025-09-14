@@ -1,4 +1,4 @@
-# afa_core/signal_generator.py 
+# afa_core/signal_generator.py (CLEANED - Debug prints removed)
 
 import pandas as pd
 import numpy as np
@@ -17,31 +17,27 @@ class SignalGenerator:
 
         Args:
             df_ohlcv (pd.DataFrame): Input DataFrame.
-                                    For single symbol: DatetimeIndex (name 'timestamp'),
+                                     For single symbol: DatetimeIndex (name 'timestamp'),
                                                         columns 'open', 'high', 'low', 'close'.
-                                    For multi-symbol: MultiIndex (levels 'symbol', 'timestamp'),
-                                                    columns 'open', 'high', 'low', 'close'.
+                                     For multi-symbol: MultiIndex (levels 'symbol', 'timestamp'),
+                                                       columns 'open', 'high', 'low', 'close'.
         Raises:
             TypeError: If input is not a DataFrame.
             ValueError: If DataFrame is empty or missing required OHLCV columns.
                         If MultiIndex is detected but doesn't have 2 levels.
         """
-        # print("\n[SignalGenerator.__init__] - START") # Keep or remove these debug prints as needed
         if not isinstance(df_ohlcv, pd.DataFrame):
             raise TypeError("Input data must be a pandas DataFrame.")
         if df_ohlcv.empty:
             self.df = pd.DataFrame()
             self.multi_symbol = False
             self.added_signals = []
-            # print("[SignalGenerator.__init__] - Initialized with empty DataFrame.")
             return
 
         # Crucial: Ensure a deep copy to prevent external modifications
         self.df = df_ohlcv.copy(deep=True)
         self.df.columns = self.df.columns.str.lower() # Normalize column names
-        # print(f"[SignalGenerator.__init__] - Input df index before processing: {self.df.index.names}, type: {type(self.df.index)}")
-
-
+        
         required_cols = {"open", "high", "low", "close"}
         if not required_cols.issubset(self.df.columns):
             raise ValueError(f"Input DataFrame must contain columns: {', '.join(required_cols)}.")
@@ -49,57 +45,42 @@ class SignalGenerator:
         # Determine multi-symbol mode and validate index structure
         if isinstance(self.df.index, pd.MultiIndex):
             self.multi_symbol = True
-            # print(f"[SignalGenerator.__init__] - Detected MultiIndex. N levels: {self.df.index.nlevels}")
             if self.df.index.nlevels != 2:
                 raise ValueError(f"MultiIndex DataFrame expected 2 levels, but found {self.df.index.nlevels}.")
             
             # Defensive check and reordering if levels are not ['symbol', 'timestamp']
             if self.df.index.names != ['symbol', 'timestamp']:
                 current_names = list(self.df.index.names)
-                # print(f"[SignalGenerator.__init__] - MultiIndex has unexpected names: {current_names}. Attempting normalization.")
                 
                 if 'symbol' in current_names and 'timestamp' in current_names:
                     if current_names.index('symbol') != 0 or current_names.index('timestamp') != 1:
                         try:
                             self.df = self.df.reorder_levels(['symbol', 'timestamp']).sort_index()
-                            # print(f"[SignalGenerator.__init__] - Info: MultiIndex levels reordered to {self.df.index.names}")
                         except Exception as e:
+                            # Log this warning as it indicates an unexpected index state
                             print(f"[SignalGenerator.__init__] - Warning: Failed to reorder MultiIndex levels to ['symbol', 'timestamp']. Error: {e}. Current names: {self.df.index.names}")
                 else:
-                    if current_names[0] is None and current_names[1] is None:
+                    try:
+                        # Attempt to set names if they are None or incorrect
                         self.df.index.set_names(['symbol', 'timestamp'], inplace=True)
-                        # print(f"[SignalGenerator.__init__] - Info: MultiIndex levels set names to {self.df.index.names}")
-                    elif current_names[0] == 'symbol' and current_names[1] is None:
-                        self.df.index.set_names(['symbol', 'timestamp'], level=1, inplace=True)
-                        # print(f"[SignalGenerator.__init__] - Info: MultiIndex level 1 name set to 'timestamp'. Current names: {self.df.index.names}")
-                    elif current_names[0] is None and current_names[1] == 'timestamp':
-                        self.df.index.set_names(['symbol', 'timestamp'], level=0, inplace=True)
-                        # print(f"[SignalGenerator.__init__] - Info: MultiIndex level 0 name set to 'symbol'. Current names: {self.df.index.names}")
-                    else:
-                        # print(f"[SignalGenerator.__init__] - Warning: MultiIndex levels have unexpected names {self.df.index.names}. Attempting to assign 'symbol' and 'timestamp'.")
-                        try:
-                            self.df.index.set_names(['symbol', 'timestamp'], inplace=True)
-                            self.df = self.df.reorder_levels(['symbol', 'timestamp']).sort_index()
-                            # print(f"[SignalGenerator.__init__] - Info: MultiIndex levels assigned and reordered to {self.df.index.names}")
-                        except Exception as e:
-                            print(f"[SignalGenerator.__init__] - Warning: Final attempt to normalize MultiIndex failed. Error: {e}")
+                        self.df = self.df.reorder_levels(['symbol', 'timestamp']).sort_index()
+                    except Exception as e:
+                        # Log a critical warning if normalization fails
+                        print(f"[SignalGenerator.__init__] - CRITICAL WARNING: Final attempt to normalize MultiIndex failed during initialization. Error: {e}. Current names: {self.df.index.names}")
             
             # Final check of index names after __init__ logic
             if self.df.index.names != ['symbol', 'timestamp']:
-                print(f"[SignalGenerator.__init__] - CRITICAL: MultiIndex names are still not ['symbol', 'timestamp'] after init: {self.df.index.names}")
-                # Consider raising an error here if this state is unacceptable
+                # Log a critical error if index names are still wrong, as this will lead to failures
+                print(f"[SignalGenerator.__init__] - ERROR: MultiIndex names are not ['symbol', 'timestamp'] after initialization: {self.df.index.names}. Multi-symbol functionality may fail.")
                 
         else: # Single symbol DataFrame
             self.multi_symbol = False
-            # print(f"[SignalGenerator.__init__] - Detected single Index. Type: {type(self.df.index)}")
             if not isinstance(self.df.index, pd.DatetimeIndex):
                 raise TypeError("Single-symbol DataFrame must have a DatetimeIndex.")
             if self.df.index.name != 'timestamp':
                 self.df.index.name = 'timestamp'
-                # print(f"[SignalGenerator.__init__] - Info: Single Index name set to {self.df.index.name}")
         
         self.added_signals = [] # List to keep track of added signal columns
-        # print(f"[SignalGenerator.__init__] - END. Final self.df index: {self.df.index.names}, multi_symbol: {self.multi_symbol}")
 
     # ---------- HELPER ----------
     def _apply_per_symbol(self, func, *args, **kwargs):
@@ -108,31 +89,27 @@ class SignalGenerator:
         When in multi-symbol mode, it groups by 'symbol' and applies the
         function to each symbol's data, which is temporarily single-indexed.
         """
-        # print(f"\n[SignalGenerator._apply_per_symbol] - START. Current self.df index: {self.df.index.names}, multi_symbol: {self.multi_symbol}")
-        
         if self.multi_symbol:
             if 'symbol' not in self.df.index.names:
-                # print(f"[SignalGenerator._apply_per_symbol] - ERROR: 'symbol' not in MultiIndex levels: {self.df.index.names}")
+                # This is a critical error, as grouping by 'symbol' is essential here
                 raise ValueError(f"Cannot group by 'symbol'. MultiIndex levels are: {self.df.index.names}")
             
-            # The key change is how we process the groups and then concatenate
             processed_dfs = []
             for symbol, group_df in self.df.groupby(level="symbol"):
                 # Pass the single-indexed DataFrame to the function
                 temp_df = func(group_df.droplevel("symbol"), *args, **kwargs)
                 
                 # Re-add the symbol level. Create a new MultiIndex.
-                # Ensure the temporary df has a 'timestamp' index before re-indexing
                 if not isinstance(temp_df.index, pd.DatetimeIndex) or temp_df.index.name != 'timestamp':
-                    if temp_df.index.name is None: # If name is lost, try to restore
-                        temp_df.index.name = 'timestamp'
-                    else:
-                        print(f"[SignalGenerator._apply_per_symbol] - WARNING: Applied function returned DataFrame with unexpected index type or name: {type(temp_df.index)}, {temp_df.index.name}. Attempting to force 'timestamp'.")
-                        # You might need more robust handling here if func radically changes index
-                        # For now, we assume it's a DatetimeIndex that might have lost its name.
+                    # Log a warning if the applied function changed the index unexpectedly
+                    print(f"[SignalGenerator._apply_per_symbol] - WARNING: Applied function returned DataFrame for symbol '{symbol}' with unexpected index type or name: {type(temp_df.index)}, {temp_df.index.name}. Attempting to force 'timestamp'.")
+                    try:
+                        # Best effort to convert and set name if needed
                         temp_df = temp_df.set_index(pd.to_datetime(temp_df.index), drop=False)
                         temp_df.index.name = 'timestamp'
-
+                    except Exception as e:
+                        print(f"[SignalGenerator._apply_per_symbol] - CRITICAL ERROR: Failed to re-establish DatetimeIndex for symbol '{symbol}' after applying function. Error: {e}")
+                        # Depending on severity, you might want to raise an error here or skip this symbol
 
                 # Create a MultiIndex for this processed group
                 multi_idx = pd.MultiIndex.from_product([[symbol], temp_df.index], names=['symbol', 'timestamp'])
@@ -141,23 +118,16 @@ class SignalGenerator:
             
             # Concatenate all processed (and re-indexed) DataFrames
             result_df = pd.concat(processed_dfs).sort_index()
-            
-            # print(f"[SignalGenerator._apply_per_symbol] - MultiIndex reconstruction END. Result df index: {result_df.index.names}, type: {type(result_df.index)}")
-            # print(f"[SignalGenerator._apply_per_symbol] - END. Returning DataFrame with index: {result_df.index.names}")
             return result_df
         else:
-            # print("[SignalGenerator._apply_per_symbol] - END. Applying function directly to single-symbol DataFrame.")
             return func(self.df, *args, **kwargs)
 
     # ---------- INDICATORS ----------
-    # (No functional changes to indicator methods - they call _apply_per_symbol)
 
     def add_sma_crossover_signal(self, short_window=50, long_window=200):
-        # print(f"[SignalGenerator.add_sma_crossover_signal] - START. self.df index: {self.df.index.names}")
-        # Re-introducing the inner _sma function for clarity as the assign chain makes debugging harder
         def _sma(df, short_window, long_window):
-            if len(df) < long_window: # Not enough data for long SMA
-                df_copy = df.copy() # Operate on a copy to avoid SettingWithCopyWarning
+            if len(df) < long_window: 
+                df_copy = df.copy() 
                 df_copy[f"sma_{short_window}"] = np.nan
                 df_copy[f"sma_{long_window}"] = np.nan
                 df_copy["sma_signal"] = 0.0
@@ -176,11 +146,9 @@ class SignalGenerator:
         self.df = self._apply_per_symbol(_sma, short_window, long_window)
         self.added_signals.extend([f"sma_{short_window}", f"sma_{long_window}", "sma_signal", "sma_crossover"])
         self.added_signals = list(set(self.added_signals)) 
-        # print(f"[SignalGenerator.add_sma_crossover_signal] - END. self.df index: {self.df.index.names}")
         return self.df
 
     def add_rsi_signal(self, length=14, upper_bound=70, lower_bound=30):
-        # print(f"[SignalGenerator.add_rsi_signal] - START. self.df index: {self.df.index.names}")
         def _rsi(df, length, upper, lower):
             if len(df) < length: 
                 df_copy = df.copy()
@@ -199,11 +167,9 @@ class SignalGenerator:
         self.df = self._apply_per_symbol(_rsi, length, upper_bound, lower_bound)
         self.added_signals.extend(["rsi", "rsi_signal"])
         self.added_signals = list(set(self.added_signals))
-        # print(f"[SignalGenerator.add_rsi_signal] - END. self.df index: {self.df.index.names}")
         return self.df
 
     def add_macd_signal(self, fast=12, slow=26, signal=9):
-        # print(f"[SignalGenerator.add_macd_signal] - START. self.df index: {self.df.index.names}")
         def _macd(df, fast, slow, signal):
             if len(df) < slow + signal: 
                 df_copy = df.copy()
@@ -227,11 +193,9 @@ class SignalGenerator:
         self.df = self._apply_per_symbol(_macd, fast, slow, signal)
         self.added_signals.extend(["macd", "macd_signal_line", "macd_hist", "macd_signal", "macd_crossover"])
         self.added_signals = list(set(self.added_signals))
-        # print(f"[SignalGenerator.add_macd_signal] - END. self.df index: {self.df.index.names}")
         return self.df
 
     def add_bollinger_bands_signal(self, length=20, std_dev=2):
-        # print(f"[SignalGenerator.add_bollinger_bands_signal] - START. self.df index: {self.df.index.names}")
         def _bb(df, length, std_dev):
             if len(df) < length: 
                 df_copy = df.copy()
@@ -255,11 +219,9 @@ class SignalGenerator:
         self.df = self._apply_per_symbol(_bb, length, std_dev)
         self.added_signals.extend(["bb_bbm", "bb_bbh", "bb_bbl", "bb_signal"])
         self.added_signals = list(set(self.added_signals))
-        # print(f"[SignalGenerator.add_bollinger_bands_signal] - END. self.df index: {self.df.index.names}")
         return self.df
 
     def add_stochastic_signal(self, k_window=14, d_window=3):
-        # print(f"[SignalGenerator.add_stochastic_signal] - START. self.df index: {self.df.index.names}")
         def _stoch(df, k, d):
             if len(df) < k: 
                 df_copy = df.copy()
@@ -290,13 +252,11 @@ class SignalGenerator:
         self.df = self._apply_per_symbol(_stoch, k_window, d_window)
         self.added_signals.extend(["stoch_k", "stoch_d", "stoch_signal"])
         self.added_signals = list(set(self.added_signals))
-        # print(f"[SignalGenerator.add_stochastic_signal] - END. self.df index: {self.df.index.names}")
         return self.df
 
 
     # ---------- COMPOSITE SIGNAL ----------
     def add_composite_signal(self, weights=None, buy_threshold=0.3, sell_threshold=-0.3):
-        # print(f"[SignalGenerator.add_composite_signal] - START. self.df index: {self.df.index.names}")
         if weights is None:
             weights = {
                 "sma_signal": 0.3,
@@ -321,7 +281,6 @@ class SignalGenerator:
         self.df = self._apply_per_symbol(_composite, weights, buy_threshold, sell_threshold)
         self.added_signals.extend(["composite_signal_raw", "composite_action"])
         self.added_signals = list(set(self.added_signals))
-        # print(f"[SignalGenerator.add_composite_signal] - END. self.df index: {self.df.index.names}")
         return self.df
 
     # ---------- UTILS ----------
